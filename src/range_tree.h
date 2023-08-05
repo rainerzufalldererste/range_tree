@@ -17,7 +17,7 @@ struct dim_point
   static constexpr size_t dim = TDimensions;
 };
 
-template <typename TKey, typename TValue, typename TLess = std::less<TKey>>
+template <typename TKey, typename TValue>
 struct range_tree
 {
   typedef dim_point<TKey, 2, TValue> point;
@@ -26,11 +26,11 @@ private:
   struct node
   {
     TKey key;
+    TKey min, max;
 
     size_t left = (size_t)-1, right = (size_t)-1;
 
-    node(TKey k) : key(k) {}
-    node(TKey k, TValue v) : key(k), value(v) {}
+    node(const TKey k, const TKey min, const TKey max) : key(k), min(min), max(max) {}
   };
 
   struct hdim_ref
@@ -61,15 +61,33 @@ private:
   {
     const node &n = dim_0[nodeIdx];
 
-    TKey minV = n.key;
-    TKey maxV = n.key;
+    if (n.min >= min[0] && n.max <= max[0])
+    {
+      // Check y dim.
+      const hdim_node &y = dim_1[nodeIdx];
 
-    if (n.key < min[0] || n.key > max[0])
-      return;
+      for (size_t i = y_start; i < y.keys.size(); i++)
+      {
+        if (y.keys[i].coord > max[1])
+          return;
+
+        out.push_back(x_sorted[y.keys[i].pointIndex]);
+      }
+    }
+    else
+    {
+      // Go left?
+      if (n.left != (size_t)-1 && n.min <= max[0] && n.key >= min[0])
+        find_in_range(min, max, n.left, dim_1[nodeIdx].keys[y_start].left, out);
+
+      // Go right?
+      if (n.right != (size_t)-1 && n.max >= min[0] && n.key <= max[0])
+        find_in_range(min, max, n.right, dim_1[nodeIdx].keys[y_start].right, out);
+    }
   }
 
 public:
-  static inline bool create(const point *pValues, const size_t valueCount, range_tree<TKey, TValue, TLess> &tree)
+  static inline bool create(const point *pValues, const size_t valueCount, range_tree<TKey, TValue> &tree)
   {
     if (valueCount == 0)
       return false;
@@ -119,7 +137,7 @@ public:
     // Add root.
     {
       const size_t splitPoint = tree.x_sorted.size() / 2;
-      tree.dim_0.push_back(node(tree.x_sorted[splitPoint].p[0]));
+      tree.dim_0.push_back(node(tree.x_sorted[splitPoint].p[0], tree.x_sorted.front().p[0], tree.x_sorted.back().p[0]));
       tree.dim_1.push_back(hdim_node(&tree.x_sorted[0], 0, tree.x_sorted.size(), 1));
 
       if (tree.x_sorted.size() > 1)
@@ -138,7 +156,7 @@ public:
 
       const size_t splitPoint = (child.max - child.min) / 2 + child.min;
 
-      tree.dim_0.push_back(node(tree.x_sorted[splitPoint].p[0]));
+      tree.dim_0.push_back(node(tree.x_sorted[splitPoint].p[0], tree.x_sorted[child.min].p[0], tree.x_sorted[child.max - 1].p[0]));
       tree.dim_1.push_back(hdim_node(&tree.x_sorted[0], child.min, child.max, 1));
 
       const size_t idx = tree.dim_0.size() - 1;
@@ -213,12 +231,23 @@ public:
   {
     std::vector<point> ret;
 
-    const auto &it = std::lower_bound(dim_1.begin(), dim_1.end(), min[1]);
+    const auto &it = std::lower_bound(dim_1[0].keys.begin(), dim_1[0].keys.end(), min[1], [](const hdim_ref &a, const TKey &b)
+      {
+        if (a.coord < b)
+          return true;
+
+        if (a.coord > b) // please, dear compiler, get rid of this check.
+          return false;
+
+        // if porting to more than 2 dimensions, you'll have to do some sorting based on the other dimensions.
+        
+        return false;
+      });
     
-    if (it == dim_1.end())
+    if (it == dim_1[0].keys.end())
       return ret;
 
-    const size_t y_start = it - dim_1.begin();
+    const size_t y_start = it - dim_1[0].keys.begin();
 
     find_in_range(min, max, 0, y_start, ret);
     

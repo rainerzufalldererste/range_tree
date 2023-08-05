@@ -30,8 +30,8 @@ int32_t main(int32_t argc, char **pArgv)
   range_tree<int64_t, std::string> tree;
   range_tree<int64_t, std::string>::create(values, std::size(values), tree);
   
-  const int64_t min[] = { 16, 53 };
-  const int64_t max[] = { 18, 60 };
+  const int64_t min[] = { 16, 18 };
+  const int64_t max[] = { 53, 60 };
 
   std::vector<dim_point<int64_t, 2, std::string>> results = tree.in_range(min, max);
 
